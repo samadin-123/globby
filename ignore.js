@@ -184,7 +184,20 @@ const parseIgnoreFile = (file, cwd) => {
 		.map(pattern => applyBaseToPattern(pattern, base));
 };
 
+// Cache for path normalization results
+const pathNormalizationCache = new Map();
+
 const toRelativePath = (fileOrDirectory, cwd) => {
+	// Create a cache key from both inputs
+	const cacheKey = `${fileOrDirectory}\0${cwd}`;
+
+	// Check cache first
+	if (pathNormalizationCache.has(cacheKey)) {
+		return pathNormalizationCache.get(cacheKey);
+	}
+
+	let result;
+
 	if (path.isAbsolute(fileOrDirectory)) {
 		// When paths are equal, path.relative returns empty string which is valid
 		// isPathInside returns false for equal paths, so check this case first
@@ -192,27 +205,28 @@ const toRelativePath = (fileOrDirectory, cwd) => {
 		if (relativePath && !isPathInside(fileOrDirectory, cwd)) {
 			// Path is outside cwd - it cannot be ignored by patterns in cwd
 			// Return undefined to indicate this path is outside scope
-			return undefined;
+			result = undefined;
+		} else {
+			result = relativePath;
 		}
-
-		return relativePath;
+	} else if (fileOrDirectory.startsWith('./')) {
+		// Normalize relative paths:
+		// - Git treats './foo' as 'foo' when checking against patterns
+		// - Patterns starting with './' in .gitignore are invalid and don't match anything
+		// - The ignore library expects normalized paths without './' prefix
+		result = fileOrDirectory.slice(2);
+	} else if (fileOrDirectory.startsWith('../')) {
+		// Paths with ../ point outside cwd and cannot match patterns from this directory
+		// Return undefined to indicate this path is outside scope
+		result = undefined;
+	} else {
+		result = fileOrDirectory;
 	}
 
-	// Normalize relative paths:
-	// - Git treats './foo' as 'foo' when checking against patterns
-	// - Patterns starting with './' in .gitignore are invalid and don't match anything
-	// - The ignore library expects normalized paths without './' prefix
-	if (fileOrDirectory.startsWith('./')) {
-		return fileOrDirectory.slice(2);
-	}
+	// Cache the result
+	pathNormalizationCache.set(cacheKey, result);
 
-	// Paths with ../ point outside cwd and cannot match patterns from this directory
-	// Return undefined to indicate this path is outside scope
-	if (fileOrDirectory.startsWith('../')) {
-		return undefined;
-	}
-
-	return fileOrDirectory;
+	return result;
 };
 
 const notIgnored = {ignored: false, unignored: false};
