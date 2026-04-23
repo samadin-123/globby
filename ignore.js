@@ -147,7 +147,7 @@ const applyBaseToPattern = (pattern, base) => {
 		return pattern;
 	}
 
-	const isNegative = isNegativePattern(pattern);
+	const isNegative = pattern[0] === '!';
 	const cleanPattern = isNegative ? pattern.slice(1) : pattern;
 
 	// Check if pattern has non-trailing slashes
